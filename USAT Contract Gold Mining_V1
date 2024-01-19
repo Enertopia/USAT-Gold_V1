@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+contract USATGoldToken is Initializable, ERC721Upgradeable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
+    struct GoldData {
+        string mineName;
+        uint256 estimatedValue;
+        uint256 extractionCost;
+        uint256 feasibilityScore;
+        uint256 goldPurity;        // Purity of the gold (in parts per thousand)
+        uint256 reserveSize;       // Estimated size of the gold reserve
+        string environmentalImpact; // Assessment of environmental impact
+    }
+
+    mapping(uint256 => GoldData) private _goldDetails;
+
+    function initialize() public initializer {
+        __ERC721_init("USATGoldToken", "USATG");
+        __Ownable_init();
+        __Pausable_init();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function mintUSATGoldToken(
+        address to,
+        uint256 tokenId,
+        string memory mineName,
+        uint256 estimatedValue,
+        uint256 extractionCost,
+        uint256 feasibilityScore,
+        uint256 goldPurity,
+        uint256 reserveSize,
+        string memory environmentalImpact
+    ) public onlyOwner whenNotPaused {
+        _mint(to, tokenId);
+        _goldDetails[tokenId] = GoldData(
+            mineName, 
+            estimatedValue, 
+            extractionCost, 
+            feasibilityScore, 
+            goldPurity, 
+            reserveSize, 
+            environmentalImpact
+        );
+    }
+
+    function getUSATGoldDetails(uint256 tokenId) public view returns (GoldData memory) {
+        require(_exists(tokenId), "USATGoldToken: Query for nonexistent token");
+        return _goldDetails[tokenId];
+    }
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    // Additional functions to update gold asset details (e.g., reserve size, environmental impact) can be implemented here
+}
