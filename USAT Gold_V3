@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.0 <0.9.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/governance/Governor.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract USATGoldToken is ERC721, Governor, GovernorCountingSimple, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl, Ownable {
+    struct GoldData {
+        // Extended GoldData struct
+    }
+
+    struct Validator {
+        // Extended Validator struct
+    }
+
+    mapping(address => Validator) private validators;
+    uint256 private minimumTokenStakeForValidators;
+
+    event ValidatorProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed validatorAddress, string description);
+    event ValidatorUpdated(address indexed validatorAddress, Validator newValidatorData);
+    event TokenMinted(address indexed to, uint256 tokenId);
+    event TokenBurned(uint256 tokenId);
+
+    constructor() ERC721("USATGoldToken", "UGT") {
+        // Constructor logic for compatibility
+    }
+
+    function mintToken(address to, uint256 tokenId) public onlyOwner {
+        _mint(to, tokenId);
+        emit TokenMinted(to, tokenId);
+    }
+
+    function burnToken(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Only token owner can burn");
+        _burn(tokenId);
+        emit TokenBurned(tokenId);
+    }
+
+    function proposeUpdateValidator(address _validatorAddress, Validator calldata _newValidatorData, string calldata description) public returns (uint256) {
+        require(balanceOf(msg.sender) >= minimumTokenStakeForValidators, "Insufficient tokens");
+        // Logic to create a proposal
+        emit ValidatorProposalCreated(proposalId, msg.sender, _validatorAddress, description);
+        return proposalId;
+    }
+
+    function executeUpdateValidator(address _validatorAddress, Validator calldata _newValidatorData) public {
+        // Logic for proposal execution
+        emit ValidatorUpdated(_validatorAddress, _newValidatorData);
+    }
+
+    // Additional functions and logic
+    // Example: Detailed validator registration and removal, voting strategies, etc.
+}
