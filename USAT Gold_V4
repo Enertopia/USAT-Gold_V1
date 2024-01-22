@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.0 <0.9.0;
+
+// Import OpenZeppelin contracts and Chainlink
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/governance/Governor.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
+
+// USATGoldToken contract: represents a tokenized gold asset within the TitleChain ecosystem
+contract USATGoldToken is ERC721, Governor, GovernorCountingSimple, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl, Ownable {
+    // GoldData struct: stores gold asset information, including its link to the TitleChain ecosystem
+    struct GoldData {
+        string assetRequirement;
+        string assetDescription;
+        uint256 usatScore; // Evaluated based on sustainable mining practices and environmental impact
+        string marketType; // OTC, Private DeFi Pool
+        bool isActive; // Indicates if the asset is active in the TitleChain ecosystem
+        uint256 fractionalShare; // Represents the fractional ownership of the asset
+        string terms; // Terms of ownership or contract
+    }
+
+    // Validator struct: manages validators in the TitleChain ecosystem
+    struct Validator {
+        string name;
+        string role;
+        bool isApproved;
+        address memberID; // Links to the Member ID in the TitleChain ecosystem
+    }
+
+    // State variables
+    mapping(uint256 => GoldData) private goldDataMapping; // Maps token ID to GoldData
+    mapping(address => Validator) private validators; // Maps address to Validator
+    uint256 private minimumTokenStakeForValidators;
+    AggregatorV3Interface internal priceFeed; // Chainlink price feed for gold price
+
+    // Events
+    event GoldDataAdded(uint256 indexed tokenId, GoldData data);
+    event GoldDataUpdated(uint256 indexed tokenId, GoldData data);
+    event ValidatorProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed validatorAddress, string description);
+    event ValidatorUpdated(address indexed validatorAddress, Validator newValidatorData);
+    event TokenMinted(address indexed to, uint256 tokenId);
+    event TokenBurned(uint256 tokenId);
+
+    // Constructor
+    constructor(address _priceFeedAddress) ERC721("USATGoldToken", "UGT") {
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+    }
+
+    // ERC721 and Governance functions...
+
+    // GoldData management functions
+    // Updated to align with TitleChain ecosystem
+    function addGoldData(uint256 tokenId, GoldData memory data) public onlyOwner {
+        require(!_exists(tokenId), "GoldData for token already exists");
+        goldDataMapping[tokenId] = data;
+        emit GoldDataAdded(tokenId, data);
+    }
+
+    function updateGoldData(uint256 tokenId, GoldData memory data) public onlyOwner {
+        require(_exists(tokenId), "GoldData for token does not exist");
+        goldDataMapping[tokenId] = data;
+        emit GoldDataUpdated(tokenId, data);
+    }
+
+    function getGoldData(uint256 tokenId) public view returns (GoldData memory) {
+        require(_exists(tokenId), "GoldData for token does not exist");
+        return goldDataMapping[tokenId];
+    }
+
+    // Chainlink integration for dynamic gold price
+    function getLatestGoldPrice() public view returns (int) {
+        (,int price,,,) = priceFeed.latestRoundData();
+        return price;
+    }
+
+    // Functions related to validators and governance...
+    // Example: Validator registration, voting strategies, proposal creation and execution, etc.
+
+    // ERC721 token minting and burning
+    function mintToken(address to, uint256 tokenId) public onlyOwner {
+        _mint(to, tokenId);
+        emit TokenMinted(to, tokenId);
+    }
+
+    function burnToken(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Only token owner can burn");
+        _burn(tokenId);
+        emit TokenBurned(tokenId);
+    }
+
+    // Additional logic as required...
+}
