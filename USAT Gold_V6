@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/governance/Governor.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
+import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@chainlink/contracts/src/v0.9/interfaces/AggregatorV3Interface.sol";
+
+contract USATGoldToken is ERC721, Governor, GovernorCountingSimple, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl, Ownable {
+    struct GoldData {
+        string assetRequirement;
+        string assetDescription;
+        uint256 usatScore;
+        string marketType;
+        bool isActive;
+        uint256 fractionalShare;
+        string terms;
+    }
+
+    struct Validator {
+        string name;
+        string role;
+        bool isApproved;
+        address memberID;
+    }
+
+    mapping(uint256 => GoldData) private goldDataMapping;
+    mapping(address => Validator) private validators;
+    mapping(uint256 => uint256) public tokenStakingTimestamps;
+    uint256 private minimumTokenStakeForValidators;
+    AggregatorV3Interface internal priceFeed;
+
+    event GoldDataAdded(uint256 indexed tokenId, GoldData data);
+    event GoldDataUpdated(uint256 indexed tokenId, GoldData data);
+    event ValidatorProposalCreated(uint256 indexed proposalId, address indexed proposer, address indexed validatorAddress, string description);
+    event ValidatorUpdated(address indexed validatorAddress, Validator newValidatorData);
+    event TokenMinted(address indexed to, uint256 tokenId);
+    event TokenBurned(uint256 tokenId);
+    event TokenStaked(uint256 tokenId, uint256 timestamp);
+
+    constructor(address _priceFeedAddress) ERC721("USATGoldToken", "UGT") {
+        priceFeed = AggregatorV3Interface(_priceFeedAddress);
+    }
+
+    function addGoldData(uint256 tokenId, GoldData memory data) public onlyOwner {
+        require(!_exists(tokenId), "GoldData: Token already exists");
+        goldDataMapping[tokenId] = data;
+        emit GoldDataAdded(tokenId, data);
+    }
+
+    function updateGoldData(uint256 tokenId, GoldData memory data) public onlyOwner {
+        require(_exists(tokenId), "GoldData: Token does not exist");
+        goldDataMapping[tokenId] = data;
+        emit GoldDataUpdated(tokenId, data);
+    }
+
+    function getGoldData(uint256 tokenId) public view returns (GoldData memory) {
+        require(_exists(tokenId), "GoldData: Token does not exist");
+        return goldDataMapping[tokenId];
+    }
+
+    function getLatestGoldPrice() public view returns (int) {
+        (,int price,,,) = priceFeed.latestRoundData();
+        return price;
+    }
+
+    function mintToken(address to, uint256 tokenId) public onlyOwner {
+        _mint(to, tokenId);
+        emit TokenMinted(to, tokenId);
+    }
+
+    function burnToken(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Token: Only owner can burn");
+        _burn(tokenId);
+        emit TokenBurned(tokenId);
+    }
+
+    function stakeToken(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Staking: Only token owner can stake");
+        require(tokenStakingTimestamps[tokenId] == 0, "Staking: Token already staked");
+        tokenStakingTimestamps[tokenId] = block.timestamp;
+        emit TokenStaked(tokenId, block.timestamp);
+        // Additional staking logic here
+    }
+
+    // Additional governance and validator-related functions...
+}
