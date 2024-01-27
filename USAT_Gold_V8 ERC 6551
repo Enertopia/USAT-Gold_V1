@@ -6,14 +6,13 @@ import "@openzeppelin/contracts-upgradeable/token/ERC1155/extensions/ERC1155Supp
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/finance/PaymentSplitterUpgradeable.sol";
 
-contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155SupplyUpgradeable, ReentrancyGuardUpgradeable, AccessControlUpgradeable, UUPSUpgradeable, PaymentSplitterUpgradeable {
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+contract GoldAssetExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155SupplyUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant FRACTIONALIZER_ROLE = keccak256("FRACTIONALIZER_ROLE");
-    bytes32 public constant KYC_VERIFIED = keccak256("KYC_VERIFIED");
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
     struct GoldAsset {
         uint256 id;
@@ -26,42 +25,33 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
 
     uint256 private _nextTokenID;
     mapping(uint256 => GoldAsset) public goldAssets;
-    mapping(address => uint256) public pendingWithdrawals;
 
     event GoldAssetMinted(uint256 indexed tokenId, address indexed minter, uint256 weight, uint purity, string certification, bool isFractional);
-    event SaleProceedsWithdrawn(address indexed withdrawer, uint256 amount);
-    event PriceUpdated(uint256 indexed tokenId, uint256 newPrice);
+    event PriceUpdated(uint256 indexed tokenId, uint256 newPricePerMilligram);
 
-    // Constructor replaced by initialize function for upgradeability
-    function initialize(string memory uri, address[] memory shareholders, uint256[] memory shares) public initializer {
+    function initialize(string memory uri) public initializer {
         __ERC721_init("USATGoldToken", "UGT");
         __ERC1155_init(uri);
-        __ReentrancyGuard_init();
         __AccessControl_init();
+        __ReentrancyGuard_init();
+        __Pausable_init();
         __UUPSUpgradeable_init();
-        __PaymentSplitter_init(shareholders, shares);
 
-        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender); // Using DEFAULT_ADMIN_ROLE for initial setup
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(UPGRADER_ROLE, msg.sender);
         _setRoleAdmin(MINTER_ROLE, ADMIN_ROLE);
-        _setRoleAdmin(FRACTIONALIZER_ROLE, ADMIN_ROLE);
-        _setRoleAdmin(KYC_VERIFIED, ADMIN_ROLE);
+        _setRoleAdmin(UPGRADER_ROLE, ADMIN_ROLE);
 
-        _nextTokenID = 1; // Start token IDs at 1 for easier existence checks
+        _nextTokenID = 1;
     }
 
-    function mintGoldAsset(uint256 weight, uint purity, string calldata certification, uint256 pricePerMilligram, bool isFractional) public onlyRole(MINTER_ROLE) onlyRole(KYC_VERIFIED) returns (uint256) {
+    function mintGoldAsset(uint256 weight, uint purity, string calldata certification, uint256 pricePerMilligram, bool isFractional) public onlyRole(MINTER_ROLE) whenNotPaused returns (uint256) {
         require(purity <= 999, "Invalid purity");
-        uint256 newTokenID = _nextTokenID++;
-
-        if (isFractional) {
-            _mint(msg.sender, newTokenID, weight, "");
-        } else {
-            _mint(msg.sender, newTokenID);
-            _setTokenURI(newTokenID, certification);
-        }
+        require(weight > 0, "Invalid weight");
+        uint256 tokenId = _nextTokenID++;
 
         GoldAsset memory newAsset = GoldAsset({
-            id: newTokenID,
+            id: tokenId,
             weight: weight,
             purity: purity,
             certification: certification,
@@ -69,29 +59,30 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
             isFractional: isFractional
         });
 
-        goldAssets[newTokenID] = newAsset;
-        emit GoldAssetMinted(newTokenID, msg.sender, weight, purity, certification, isFractional);
-        return newTokenID;
+        goldAssets[tokenId] = newAsset;
+
+        if (isFractional) {
+            _mint(msg.sender, tokenId, weight, ""); // ERC1155 mint
+        } else {
+            _mint(msg.sender, tokenId); // ERC721 mint
+            _setTokenURI(tokenId, certification); // Set URI for ERC721
+        }
+
+        emit GoldAssetMinted(tokenId, msg.sender, weight, purity, certification, isFractional);
+        return tokenId;
     }
 
-    function updatePrice(uint256 tokenId, uint256 newPricePerMilligram) public onlyRole(ADMIN_ROLE) {
-        require(goldAssets[tokenId].id != 0, "Asset does not exist");
-        goldAssets[tokenId].pricePerMilligram = newPricePerMilligram;
-        emit PriceUpdated(tokenId, newPricePerMilligram);
+    function pause() public onlyRole(ADMIN_ROLE) {
+        _pause();
     }
 
-    // Example of a function to buy gold assets, demonstrating the use of nonReentrant modifier for security
-    function buyGoldAsset(uint256 tokenId) public payable nonReentrant {
-        // Implementation of buying logic
+    function unpause() public onlyRole(ADMIN_ROLE) {
+        _unpause();
     }
 
-    // Override _authorizeUpgrade to restrict who can perform upgrades
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
 
-    // Additional functionalities as needed, with proper security checks and optimizations
+    // Additional functions here (e.g., buyGoldAsset, updatePrice)
 
-    // Consider adding functions for:
-    // - Withdrawing proceeds with checks for non-reentrancy
-    // - Bidding and offering system for gold assets
-    // - Compliance checks and royalty distribution mechanisms
+    // Override functions to include pausable and other modifiers as necessary
 }
