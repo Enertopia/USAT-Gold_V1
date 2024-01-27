@@ -24,7 +24,7 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
         bool isFractional;
     }
 
-    uint256 private _currentTokenID;
+    uint256 private _nextTokenID;
     mapping(uint256 => GoldAsset) public goldAssets;
     mapping(address => uint256) public pendingWithdrawals;
 
@@ -32,35 +32,36 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
     event SaleProceedsWithdrawn(address indexed withdrawer, uint256 amount);
     event PriceUpdated(uint256 indexed tokenId, uint256 newPrice);
 
-    function initialize(string memory uri) public initializer {
+    // Constructor replaced by initialize function for upgradeability
+    function initialize(string memory uri, address[] memory shareholders, uint256[] memory shares) public initializer {
         __ERC721_init("USATGoldToken", "UGT");
         __ERC1155_init(uri);
         __ReentrancyGuard_init();
         __AccessControl_init();
         __UUPSUpgradeable_init();
-        __PaymentSplitter_init(_shareholders, _shares);
+        __PaymentSplitter_init(shareholders, shares);
 
-        _setupRole(ADMIN_ROLE, msg.sender);
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender); // Using DEFAULT_ADMIN_ROLE for initial setup
         _setRoleAdmin(MINTER_ROLE, ADMIN_ROLE);
         _setRoleAdmin(FRACTIONALIZER_ROLE, ADMIN_ROLE);
         _setRoleAdmin(KYC_VERIFIED, ADMIN_ROLE);
 
-        _currentTokenID = 0;
+        _nextTokenID = 1; // Start token IDs at 1 for easier existence checks
     }
 
     function mintGoldAsset(uint256 weight, uint purity, string calldata certification, uint256 pricePerMilligram, bool isFractional) public onlyRole(MINTER_ROLE) onlyRole(KYC_VERIFIED) returns (uint256) {
-        require(purity <= 999, "Invalid purity"); // Gold purity cannot exceed 999 parts per thousand
-        _currentTokenID++;
+        require(purity <= 999, "Invalid purity");
+        uint256 newTokenID = _nextTokenID++;
 
         if (isFractional) {
-            _mint(msg.sender, _currentTokenID, weight, ""); // weight treated as amount for fractional
+            _mint(msg.sender, newTokenID, weight, "");
         } else {
-            _mint(msg.sender, _currentTokenID);
-            _setTokenURI(_currentTokenID, certification); // Use certification as URI for unique assets
+            _mint(msg.sender, newTokenID);
+            _setTokenURI(newTokenID, certification);
         }
 
         GoldAsset memory newAsset = GoldAsset({
-            id: _currentTokenID,
+            id: newTokenID,
             weight: weight,
             purity: purity,
             certification: certification,
@@ -68,9 +69,9 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
             isFractional: isFractional
         });
 
-        goldAssets[_currentTokenID] = newAsset;
-        emit GoldAssetMinted(_currentTokenID, msg.sender, weight, purity, certification, isFractional);
-        return _currentTokenID;
+        goldAssets[newTokenID] = newAsset;
+        emit GoldAssetMinted(newTokenID, msg.sender, weight, purity, certification, isFractional);
+        return newTokenID;
     }
 
     function updatePrice(uint256 tokenId, uint256 newPricePerMilligram) public onlyRole(ADMIN_ROLE) {
@@ -79,9 +80,18 @@ contract USATGoldExchange is Initializable, ERC721URIStorageUpgradeable, ERC1155
         emit PriceUpdated(tokenId, newPricePerMilligram);
     }
 
-    // Implement buyGoldAsset, withdrawProceeds, and _authorizeUpgrade similarly, with added compliance checks
+    // Example of a function to buy gold assets, demonstrating the use of nonReentrant modifier for security
+    function buyGoldAsset(uint256 tokenId) public payable nonReentrant {
+        // Implementation of buying logic
+    }
 
-    // Additional functionalities: bid/offer system, compliance checks, royalty system, etc.
+    // Override _authorizeUpgrade to restrict who can perform upgrades
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(ADMIN_ROLE) {}
 
-    // NOTE: This is a more comprehensive example. Real-world use requires thorough testing and security audits.
+    // Additional functionalities as needed, with proper security checks and optimizations
+
+    // Consider adding functions for:
+    // - Withdrawing proceeds with checks for non-reentrancy
+    // - Bidding and offering system for gold assets
+    // - Compliance checks and royalty distribution mechanisms
 }
