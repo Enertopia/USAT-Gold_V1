@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721Base.sol";
+
+contract USATGoldToken is Initializable, ERC721Upgradeable, OwnableUpgradeable, 
+PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+
+    struct GoldData {
+        string mineName;
+        string environmentalImpact;
+        uint256 estimatedValue;
+        uint256 extractionCost;
+        uint256 feasibilityScore;
+        uint256 goldPurity;       
+        uint256 reserveSize;      
+        string operationalStatus; // Additional field for mine operational status
+        string complianceStatus;  // Additional field for environmental compliance status
+    }
+
+    mapping(uint256 => GoldData) private _goldDetails;
+
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+
+    event USATGoldTokenMinted(address to, uint256 tokenId, GoldData goldData);
+    event USATGoldDetailsUpdated(uint256 tokenId, GoldData goldData);
+
+    constructor() initializer {}
+
+    function initialize(string memory name, string memory symbol) public initializer {
+        __ERC721_init(name, symbol);
+        __Ownable_init();
+        __Pausable_init();
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(PAUSER_ROLE, msg.sender);
+        _grantRole(UPGRADER_ROLE, msg.sender);
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
+
+    function mintUSATGoldToken(
+        address to,
+        uint256 tokenId,
+        string memory mineName,
+        uint256 estimatedValue,
+        uint256 extractionCost,
+        uint256 feasibilityScore,
+        uint256 goldPurity,
+        uint256 reserveSize,
+        string memory environmentalImpact,
+        string memory operationalStatus,
+        string memory complianceStatus
+    ) public onlyOwner whenNotPaused nonReentrant {
+        require(goldPurity <= 1000, "Gold purity must be <= 1000 parts per thousand");
+
+        _mint(to, tokenId);
+        _goldDetails[tokenId] = GoldData(
+            mineName, 
+            environmentalImpact,
+            estimatedValue, 
+            extractionCost, 
+            feasibilityScore, 
+            goldPurity, 
+            reserveSize,
+            operationalStatus,
+            complianceStatus
+        );
+
+        emit USATGoldTokenMinted(to, tokenId, _goldDetails[tokenId]);
+    }
+
+    function getUSATGoldDetails(uint256 tokenId) public view returns (GoldData memory) {
+        require(_exists(tokenId), "Nonexistent token");
+        return _goldDetails[tokenId];
+    }
+
+    function updateGoldDetails(
+        uint256 tokenId,
+        uint256 newEstimatedValue,
+        uint256 newReserveSize,
+        string memory newOperationalStatus,
+        string memory newComplianceStatus
+    ) public onlyOwner {
+        require(_exists(tokenId), "Nonexistent token");
+
+        GoldData storage gold = _goldDetails[tokenId];
+        gold.estimatedValue = newEstimatedValue;
+        gold.reserveSize = newReserveSize;
+        gold.operationalStatus = newOperationalStatus;
+        gold.complianceStatus = newComplianceStatus;
+
+        emit USATGoldDetailsUpdated(tokenId, gold);
+    }
+
+    function pause() public onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+
+    function unpause() public onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+}
